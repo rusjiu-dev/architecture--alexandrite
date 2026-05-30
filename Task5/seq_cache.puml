@@ -1,0 +1,29 @@
+@startuml
+title Вариант 2: Redis Cache - Чтение списка заказов
+
+actor "Оператор" as Operator
+participant "MES API\n(C#)" as API
+database "Redis\n(внешний)" as Cache
+database "MES DB\n(PostgreSQL)" as DB
+
+Operator -> API: GET /api/orders?status=SUBMITTED
+activate API
+
+API -> Cache: GET dashboard:orders:status:SUBMITTED:page:1
+activate Cache
+Cache --> API: null (промах)
+deactivate Cache
+
+API -> DB: SELECT * FROM orders WHERE status = 'SUBMITTED'
+activate DB
+DB --> API: ResultSet
+deactivate DB
+
+API -> Cache: SET dashboard:orders:status:SUBMITTED:page:1 EX 30
+activate Cache
+Cache --> API: OK
+deactivate Cache
+
+API --> Operator: 200 OK
+deactivate API
+@enduml
