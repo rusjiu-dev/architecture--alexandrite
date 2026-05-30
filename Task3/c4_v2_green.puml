@@ -1,0 +1,69 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Container Diagram - Jewelry Store System with Tracing and Business Process Monitoring
+
+Person(customer, "Customer", "External user of the online store")
+Person(api_user, "API User", "B2B partner using API for price calculation")
+Person(seller, "Seller", "Operates with order, confirms manufacturing for the user")
+Person(operator, "Operator", "Takes order in work, manufactures jewelry")
+
+System_Boundary(jewelry_system, "Jewelry Store System") {
+    Container(internet_shop, "Internet Shop", "Vue, TypeScript, Threejs", "User can make an order, upload 3d model, work in 3d editor")
+    Container(shop_api, "Shop API", "Spring Boot", "Provides list of shop items, receives user 3d file, saves order info") #red
+    
+    Container(crm, "CRM", "Vue, TypeScript", "Interface for sellers to manage orders and customers")
+    Container(crm_api, "CRM API", "Spring Boot", "Handles order management operations for sellers") #red
+    
+    Container(mes, "MES", "React, TypeScript", "Provides interface to assign orders, shows list of orders")
+    Container(mes_api, "MES API", "C#", "Assigns orders on operators, shows list of orders, calculates price") #red
+    
+    Container(rabbitmq, "Messages Queue", "RabbitMQ", "Send messages about new orders, changes of statuses between containers")
+    
+    Container(shop_db, "Shop DB", "PostgreSQL", "Holds main information about customers and orders")
+    Container(mes_db, "MES db", "PostgreSQL", "Holds information about orders, assignments and statuses from MES perspective")
+    
+    Container(s3_storage, "3D Files Storage", "S3-based storage", "Stores 3d files for calculation")
+    
+    ' Tracing components (red)
+    Container(trace_collector, "Trace Collector", "OpenTelemetry Collector", "Receives, processes and exports traces from all services") #red
+    ContainerDb(trace_storage, "Trace Storage", "Grafana Tempo", "Stores and indexes distributed traces for search and analysis") #red
+    Container(trace_ui, "Trace UI", "Grafana", "Interface for searching and analyzing traces") #red
+    
+    ' Business process monitoring components (green)
+    Container(trace_analytics, "Trace Analytics Engine", "Python/Go", "Analyzes traces in real-time for business process anomalies") #green
+    Container(alertmanager, "Alertmanager", "Prometheus Alertmanager", "Routes alerts from monitoring and tracing systems") #green
+    Container(notification_channels, "Notification Channels", "Slack, SMS, Phone Call", "Delivers alerts to the appropriate teams") #green
+}
+
+' Existing relationships
+Rel(customer, internet_shop, "Uses", "HTTPS")
+Rel(internet_shop, shop_api, "API calls", "JSON/HTTPS")
+Rel(shop_api, shop_db, "Reads/Writes", "SQL/TCP")
+Rel(shop_api, s3_storage, "Uploads files", "S3 API")
+Rel(api_user, mes_api, "Uses API", "JSON/HTTPS")
+Rel(seller, crm, "Uses", "HTTPS")
+Rel(crm, crm_api, "API calls", "JSON/HTTPS")
+Rel(crm_api, shop_db, "Reads/Writes", "SQL/TCP")
+Rel(operator, mes, "Uses", "HTTPS")
+Rel(mes, mes_api, "API calls", "JSON/HTTPS")
+Rel(mes_api, mes_db, "Reads/Writes", "SQL/TCP")
+Rel(mes_api, s3_storage, "Reads files", "S3 API")
+Rel(crm_api, rabbitmq, "Sends messages", "AMQP")
+Rel(mes_api, rabbitmq, "Sends/Receives messages", "AMQP")
+
+' Tracing relationships (red)
+Rel(shop_api, trace_collector, "OTLP", "gRPC") #red
+Rel(crm_api, trace_collector, "OTLP", "gRPC") #red
+Rel(mes_api, trace_collector, "OTLP", "gRPC") #red
+Rel(trace_collector, trace_storage, "OTLP", "gRPC") #red
+Rel(trace_storage, trace_ui, "Queries", "HTTP") #red
+
+' Business process monitoring relationships (green)
+Rel(trace_collector, trace_analytics, "OTLP stream", "gRPC") #green
+Rel(trace_analytics, alertmanager, "Alert API", "HTTP") #green
+Rel(alertmanager, notification_channels, "Routes alerts", "SMTP/API") #green
+
+@enduml

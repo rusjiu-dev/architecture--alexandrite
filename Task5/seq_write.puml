@@ -1,0 +1,51 @@
+@startuml
+title Cache-Aside: Изменение статуса заказа и инвалидация кеша
+
+actor "Оператор" as Operator
+participant "MES SPA\n(React)" as Frontend
+participant "MES API\n(C#)" as API
+database "MES DB\n(PostgreSQL)" as DB
+database "Redis\n(Cache)" as Cache
+queue "RabbitMQ" as RMQ
+
+Operator -> Frontend: Нажимает "Взять в работу"\n(заказ #12345)
+Frontend -> API: PATCH /api/orders/12345/status\n{status: "MANUFACTURING_STARTED"}
+activate API
+
+API -> DB: BEGIN TRANSACTION
+activate DB
+
+API -> DB: UPDATE orders\nSET status = 'MANUFACTURING_STARTED'\nWHERE id = 12345
+API -> DB: INSERT INTO order_history\n(order_id, status, changed_by, timestamp)
+DB --> API: OK
+API -> DB: COMMIT
+deactivate DB
+
+API -> RMQ: Publish "OrderStatusChanged"\n{orderId: 12345, status: MANUFACTURING_STARTED}
+activate RMQ
+RMQ --> API: ACK
+deactivate RMQ
+
+note right of API: Инвалидация кеша\nпосле успешной записи в БД
+
+API -> Cache: DEL dashboard:orders:status:SUBMITTED:*
+activate Cache
+Cache --> API: OK
+deactivate Cache
+
+API -> Cache: DEL dashboard:orders:status:MANUFACTURING_STARTED:*
+activate Cache
+Cache --> API: OK
+deactivate Cache
+
+API -> Cache: DEL order:detail:12345
+activate Cache
+Cache --> API: OK
+deactivate Cache
+
+note right of API: Удаляем все затронутые\nкешированные данные
+
+API --> Frontend: 200 OK
+deactivate API
+Frontend --> Operator: Статус обновлён, список обновится
+@enduml

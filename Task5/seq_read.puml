@@ -1,0 +1,36 @@
+@startuml
+title Cache-Aside: Чтение списка новых заказов (дашборд MES)
+
+actor "Оператор" as Operator
+participant "MES SPA\n(React)" as Frontend
+participant "MES API\n(C#)" as API
+database "Redis\n(Cache)" as Cache
+database "MES DB\n(PostgreSQL)" as DB
+
+Operator -> Frontend: Открывает дашборд\n(фильтр: статус SUBMITTED)
+Frontend -> API: GET /api/orders?status=SUBMITTED&page=1&size=20
+activate API
+
+API -> Cache: GET dashboard:orders:status:SUBMITTED:page:1
+activate Cache
+Cache --> API: null (промах кеша)
+deactivate Cache
+
+note right of API: Cache Miss
+
+API -> DB: SELECT * FROM orders\nWHERE status = 'SUBMITTED'\nORDER BY created_at DESC\nLIMIT 20 OFFSET 0
+activate DB
+DB --> API: ResultSet (20 записей)
+deactivate DB
+
+API -> Cache: SET dashboard:orders:status:SUBMITTED:page:1\nTTL = 30 seconds
+activate Cache
+Cache --> API: OK
+deactivate Cache
+
+note right of API: Сохраняем в кеш\nна 30 секунд
+
+API --> Frontend: 200 OK, JSON с заказами
+deactivate API
+Frontend --> Operator: Отображает список заказов
+@enduml
